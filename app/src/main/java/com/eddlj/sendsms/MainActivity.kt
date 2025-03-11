@@ -21,7 +21,7 @@ import com.edlj.sendsms.databinding.ActivityMainBinding
 
 
 class MainActivity : AppCompatActivity() {
-
+    //Prueba
     private lateinit var binding: ActivityMainBinding
     private lateinit var contactAdapter: ArrayAdapter<String>
 

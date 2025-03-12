@@ -5,7 +5,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.ArrayAdapter
 import android.widget.TextView
-import com.edlj.sendsms.R
+import com.eddlj.sendsms.R
 
 
 // ContactAdapter class inherits from ArrayAdapter class and contains data of type String.

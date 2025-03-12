@@ -5,126 +5,116 @@ import android.content.ContentResolver
 import android.content.pm.PackageManager
 import android.database.Cursor
 import android.net.Uri
-import android.os.Build
 import android.os.Bundle
 import android.provider.ContactsContract
 import android.telephony.SmsManager
+import android.util.Log
 import android.view.View
 import android.widget.ArrayAdapter
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import android.util.Log
-import com.edlj.sendsms.R
-import com.edlj.sendsms.databinding.ActivityMainBinding
-
+import com.eddlj.sendsms.databinding.ActivityMainBinding
 
 class MainActivity : AppCompatActivity() {
-    //Prueba
+
     private lateinit var binding: ActivityMainBinding
     private lateinit var contactAdapter: ArrayAdapter<String>
 
-    // Permission codes are defined.
-    private val PERMISSIONS_REQUEST_SEND_SMS = 100
-    private val PERMISSIONS_REQUEST_READ_CONTACTS = 101
+    // Lista de permisos requeridos
+    private val REQUIRED_PERMISSIONS = arrayOf(
+        Manifest.permission.SEND_SMS,
+        Manifest.permission.READ_CONTACTS,
+        Manifest.permission.READ_CALL_LOG,
+        Manifest.permission.READ_PHONE_STATE
+    )
 
-    //Phone number detection vars
+    private val PERMISSION_REQUEST_CODE = 200
+
+    // Variable para almacenar el número detectado
     var phoneNum: String? = null
-    //var phonenumber_View: TextView? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        //Phone number detection
-        setContentView(R.layout.activity_main);
-        phoneNum = getIntent().getStringExtra("number");
-        //phonenumber_View = findViewById(R.id.phone_numberView);
-
         binding = ActivityMainBinding.inflate(layoutInflater)
-        val view = binding.root
-        setContentView(view)
+        setContentView(binding.root)
 
-        // ArrayAdapter and ListView are set.
+        // Detectar si hay un número de llamada entrante
+        phoneNum = intent.getStringExtra("number")
+
+        // Solicitar todos los permisos al iniciar la aplicación
+        requestAllPermissions()
+
+        // Configurar el adaptador de contactos
         contactAdapter = ArrayAdapter(this, android.R.layout.simple_list_item_1, ArrayList())
         binding.contactsListView.adapter = contactAdapter
 
-
-        // Details of the person selected from the ListView are shown.
+        // Manejo de selección de contacto
         binding.contactsListView.setOnItemClickListener { _, _, position, _ ->
             val selectedContactNumber = getContactNumber(contactAdapter.getItem(position).toString())
             showContactDetails(contactAdapter.getItem(position).toString())
             binding.editTextPhone.setText(selectedContactNumber)
         }
 
-
-        // When the SMS send button is clicked, the action is taken.
+        // Botón de enviar SMS
         binding.btnSent.setOnClickListener {
-            if (hasSendSmsPermission()) {
+            if (hasPermission(Manifest.permission.SEND_SMS)) {
                 sendSMS()
             } else {
-                requestSendSmsPermission()
+                requestAllPermissions()
             }
         }
 
-        // Show Contacts button click handler.
+        // Botón para mostrar contactos
         binding.showContactsButton.setOnClickListener {
-            if (hasReadContactsPermission()) {
+            if (hasPermission(Manifest.permission.READ_CONTACTS)) {
                 displayContacts()
             } else {
-                requestReadContactsPermission()
+                requestAllPermissions()
             }
         }
     }
 
-
-    // Function to check if SEND_SMS permission is granted.
-    private fun hasSendSmsPermission(): Boolean {
-        return ContextCompat.checkSelfPermission(
-            this@MainActivity,
-            Manifest.permission.SEND_SMS
-        ) == PackageManager.PERMISSION_GRANTED
+    // Verificar si un permiso está concedido
+    private fun hasPermission(permission: String): Boolean {
+        return ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED
     }
 
+    // Solicitar todos los permisos si no han sido concedidos
+    private fun requestAllPermissions() {
+        val permissionsToRequest = REQUIRED_PERMISSIONS.filter { !hasPermission(it) }.toTypedArray()
 
-    // Request SEND_SMS permission
-    private fun requestSendSmsPermission() {
-        ActivityCompat.requestPermissions(
-            this@MainActivity,
-            arrayOf(Manifest.permission.SEND_SMS),
-            PERMISSIONS_REQUEST_SEND_SMS
-        )
-    }
-
-
-    // Function to check if READ_CONTACTS permission is granted.
-    private fun hasReadContactsPermission(): Boolean {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            checkSelfPermission(Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED
-        } else {
-            true
+        if (permissionsToRequest.isNotEmpty()) {
+            ActivityCompat.requestPermissions(this, permissionsToRequest, PERMISSION_REQUEST_CODE)
         }
     }
 
+    // Manejar la respuesta de permisos
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
 
-    // Request READ_CONTACTS permission.
-    private fun requestReadContactsPermission() {
-        ActivityCompat.requestPermissions(
-            this@MainActivity,
-            arrayOf(Manifest.permission.READ_CONTACTS),
-            PERMISSIONS_REQUEST_READ_CONTACTS
-        )
+        if (requestCode == PERMISSION_REQUEST_CODE) {
+            val deniedPermissions = permissions.filterIndexed { index, _ -> grantResults[index] != PackageManager.PERMISSION_GRANTED }
+
+            if (deniedPermissions.isEmpty()) {
+                Log.d("Permissions", "Todos los permisos concedidos")
+            } else {
+                Log.e("Permissions", "Permisos denegados: $deniedPermissions")
+                Toast.makeText(this, "Debe conceder todos los permisos para un funcionamiento correcto", Toast.LENGTH_LONG).show()
+            }
+        }
     }
 
-    // Display contacts in the ListView.
+    // Mostrar contactos en el ListView
     private fun displayContacts() {
         val contacts = getContacts()
         contactAdapter.clear()
         contactAdapter.addAll(contacts)
     }
 
-
-    // Function to retrieve contacts from the device.
+    // Obtener contactos del dispositivo
     private fun getContacts(): List<String> {
         val contactsList = ArrayList<String>()
         val contentResolver: ContentResolver = contentResolver
@@ -142,34 +132,29 @@ class MainActivity : AppCompatActivity() {
                 val name: String? = it.getString(nameIndex)
                 val number: String? = it.getString(numberIndex)
 
-                // Null check before processing
                 if (!name.isNullOrBlank() && !number.isNullOrBlank()) {
                     val contactInfo = "$name : $number"
                     contactsList.add(contactInfo)
                 }
             }
         }
-
         return contactsList
     }
 
-
-    // Extract contact number from the formatted string.
+    // Extraer número de un contacto
     private fun getContactNumber(contact: String): String {
         val parts = contact.split(" : ").toTypedArray()
         return parts[1]
     }
 
-
-    // Display contact details in a TextView.
+    // Mostrar detalles del contacto en la pantalla
     private fun showContactDetails(contact: String) {
         binding.contactDetailsTextView.text = contact
         binding.contactDetailsTextView.visibility = View.VISIBLE
     }
 
-    // Send SMS using SmsManager.
+    // Enviar SMS con validaciones
     private fun sendSMS() {
-        //val phone: String = binding.editTextPhone.text.toString()
         val phone: String = binding.editTextPhone.text.toString()
         val message: String = binding.editTextSMS.text.toString()
 
@@ -179,48 +164,13 @@ class MainActivity : AppCompatActivity() {
             try {
                 val smsManager = SmsManager.getDefault()
                 smsManager.sendTextMessage(phone, null, message, null, null)
-                Toast.makeText(this@MainActivity, "SMS enviado correctamente", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "SMS enviado correctamente", Toast.LENGTH_SHORT).show()
             } catch (e: Exception) {
                 Log.e("SendSMS", "Error al enviar SMS", e)
-                Toast.makeText(this@MainActivity, "Error al enviar SMS", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Error al enviar SMS", Toast.LENGTH_SHORT).show()
             }
         } else {
-            Toast.makeText(this@MainActivity, "Ingrese número y mensaje", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    // Handle permission results.
-    override fun onRequestPermissionsResult(
-        requestCode: Int,
-        permissions: Array<out String>,
-        grantResults: IntArray
-    ) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-
-        when (requestCode) {
-            PERMISSIONS_REQUEST_SEND_SMS -> {
-                if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                    sendSMS()
-                } else {
-                    Toast.makeText(
-                        this@MainActivity,
-                        "Permission Denied. Cannot send SMS.",
-                        Toast.LENGTH_SHORT
-                    ).show()
-                }
-            }
-            PERMISSIONS_REQUEST_READ_CONTACTS -> {
-                if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                    displayContacts()
-                } else {
-                    Toast.makeText(
-                        this@MainActivity,
-                        "Permission Denied. Cannot display contacts.",
-                        Toast.LENGTH_SHORT
-                    ).show()
-                }
-            }
-
+            Toast.makeText(this, "Ingrese número y mensaje", Toast.LENGTH_SHORT).show()
         }
     }
 }
